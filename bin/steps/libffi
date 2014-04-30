@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+#
+# This script is invoked by [`bin/compile`](/).
+
+# The location of the pre-compiled libffi binary.
+VENDORED_LIBFFI="https://s3-us-west-2.amazonaws.com/mfenniak-graphviz/libffi-3.0.tgz"
+
+# Syntax sugar.
+source $BIN_DIR/utils
+
+# If cffi exists within requirements, use vendored libffi.
+if (grep -Eiq "^\s*cffi" requirements.txt) then
+  puts-step "Noticed cffi. Bootstrapping libffi."
+  PREV_DIR=$(pwd)
+  cd $PAASPROVIDER_DIR
+  PAASPROVIDER_PATH=$(pwd)
+  LIBFFI_LIB_PATH="$PAASPROVIDER_PATH/lib"
+  LIBFFI_PKGCONFIG_PATH="$LIBFFI_LIB_PATH/pkgconfig"
+  LIBFFI_PKGCONFIG_PC_PATH="$LIBFFI_PKGCONFIG_PATH/libffi.pc"
+
+  # Download and extract libffi into target vendor directory.
+  curl -s -L -o tmp-libffi.tar.gz $VENDORED_LIBFFI
+  tar -zxvf tmp-libffi.tar.gz > /dev/null
+  rm tmp-libffi.tar.gz
+
+  # Add libffi's to PKG_CONFIG_PATH
+  export PKG_CONFIG_PATH="$LIBFFI_PKGCONFIG_PATH:$PKG_CONFIG_PATH"
+
+  cat >$LIBFFI_PKGCONFIG_PC_PATH <<EOL
+prefix=${PAASPROVIDER_PATH}
+exec_prefix=\${prefix}
+libdir=\${exec_prefix}/lib
+includedir=\${libdir}/libffi-3.0.13/include
+
+Name: libffi
+Description: Library supporting Foreign Function Interfaces
+Version: 3.0.13
+Libs: -L\${libdir} -lffi
+Cflags: -I\${includedir}
+EOL
+
+  if [ -e $LIBFFI_PKGCONFIG_PC_PATH ]
+  then
+    puts-step "libffi.pc is in-place at $LIBFFI_PKGCONFIG_PC_PATH, libffi-based builds should work!"
+  fi
+
+  cd "$PREV_DIR"
+fi
